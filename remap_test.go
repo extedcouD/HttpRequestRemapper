@@ -1,6 +1,7 @@
 package httprequestremap
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -48,5 +49,29 @@ func TestCaptureRequestBody_RestoresBody(t *testing.T) {
 	_, b2, _ := CaptureRequestBody(r, 10)
 	if string(b2) != "hel" {
 		t.Fatalf("b2: %q", string(b2))
+	}
+}
+
+func TestEvalJSONPathFromRequest_UsesCanonicalRoot(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPost, "http://example.com/test?q=1&q=2", bytes.NewBufferString(`{"a":1}`))
+	r.Header.Set("X-Test", "abc")
+	r.AddCookie(&http.Cookie{Name: "sid", Value: "123"})
+
+	if got := EvalJSONPathFromRequest(r, "$.headers.x-test", nil); got != "abc" {
+		t.Fatalf("headers: %#v", got)
+	}
+	if got := EvalJSONPathFromRequest(r, "$.cookies.sid", nil); got != "123" {
+		t.Fatalf("cookies: %#v", got)
+	}
+	if got := EvalJSONPathFromRequest(r, "$.query.q", nil); got != "1" {
+		t.Fatalf("query first: %#v", got)
+	}
+	got := EvalJSONPathFromRequest(r, "$.query_all.q", nil)
+	s, ok := got.([]string)
+	if !ok || len(s) != 2 || s[0] != "1" || s[1] != "2" {
+		t.Fatalf("query_all: %#v", got)
+	}
+	if got := EvalJSONPathFromRequest(r, "$.body.a", nil); got != float64(1) {
+		t.Fatalf("body: %#v", got)
 	}
 }
